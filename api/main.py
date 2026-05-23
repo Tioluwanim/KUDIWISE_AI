@@ -244,3 +244,11 @@ async def chat(req: ChatRequest):
         review=review_out,
         session_id=session_id,
     )
+# Add this temporary debug endpoint to api/main.py
+@app.get("/debug/db")
+async def debug_db():
+    from core.vectorstore import get_vectorstore
+    vs = get_vectorstore()
+    # Replace 'your_collection_name' with your actual collection name
+    count = vs._collection.count()
+    return {"doc_count": count}
