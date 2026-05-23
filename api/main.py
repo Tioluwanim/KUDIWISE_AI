@@ -137,19 +137,22 @@ async def review(req: ReviewRequest):
     )
 
     try:
-        result: AgentState = await kudiwise_graph.ainvoke(initial_state)
+        result = await kudiwise_graph.ainvoke(initial_state)
     except Exception as exc:
         logger.error("Graph error in /review: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
 
-    if result.error:
-        raise HTTPException(status_code=422, detail=result.error)
+    # Access fields using dictionary `.get()` lookup since result is a dict at runtime
+    if result.get("error"):
+        raise HTTPException(status_code=422, detail=result.get("error"))
 
-    if not result.review_output:
+    review_output = result.get("review_output")
+    if not review_output:
         raise HTTPException(status_code=500, detail="Agent produced no review output.")
 
-    logger.info("/review done | rating=%s steps=%s", result.review_output.rating, result.steps_taken)
-    return result.review_output
+    # Access properties inside the nested Pydantic model response
+    logger.info("/review done | rating=%s steps=%s", review_output.rating, result.get("steps_taken"))
+    return review_output
 
 
 # ─── POST /recommend — Task B ─────────────────────────────────────────────────
@@ -171,24 +174,25 @@ async def recommend(req: RecommendRequest):
     )
 
     try:
-        result: AgentState = await kudiwise_graph.ainvoke(initial_state)
+        result = await kudiwise_graph.ainvoke(initial_state)
     except Exception as exc:
         logger.error("Graph error in /recommend: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
 
-    if result.error:
-        raise HTTPException(status_code=422, detail=result.error)
+    if result.get("error"):
+        raise HTTPException(status_code=422, detail=result.get("error"))
 
-    if not result.recommend_output:
+    recommend_output = result.get("recommend_output")
+    if not recommend_output:
         raise HTTPException(status_code=500, detail="Agent produced no recommendation output.")
 
     logger.info(
         "/recommend done | recs=%s cold_start=%s steps=%s",
-        len(result.recommend_output.recommendations),
-        result.recommend_output.cold_start,
-        result.steps_taken,
+        len(recommend_output.recommendations),
+        recommend_output.cold_start,
+        result.get("steps_taken"),
     )
-    return result.recommend_output
+    return recommend_output
 
 
 # ─── POST /chat — Multi-turn ──────────────────────────────────────────────────
@@ -210,29 +214,32 @@ async def chat(req: ChatRequest):
     )
 
     try:
-        result: AgentState = await kudiwise_graph.ainvoke(initial_state)
+        result = await kudiwise_graph.ainvoke(initial_state)
     except Exception as exc:
         logger.error("Graph error in /chat: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
 
-    # Build unified chat response regardless of which path was taken
-    reply = result.chat_reply
+    # Build unified chat response using safe .get() dictionary lookups
+    reply = result.get("chat_reply")
     items = None
     review_out = None
 
-    if result.recommend_output:
+    recommend_output = result.get("recommend_output")
+    review_output = result.get("review_output")
+
+    if recommend_output:
         reply = reply or f"Here are your top picks based on your ₦{req.persona.weekly_budget_ngn:,} budget:"
-        items = result.recommend_output.recommendations
-    elif result.review_output:
-        reply = reply or f"{result.review_output.rating}★ — {result.review_output.review}"
-        review_out = result.review_output
+        items = recommend_output.recommendations
+    elif review_output:
+        reply = reply or f"{review_output.rating}★ — {review_output.review}"
+        review_out = review_output
 
     if not reply:
         reply = "I'm here to help! Tell me what you need or what item you want reviewed."
 
     return ChatResponse(
         reply=reply,
-        intent=result.intent or "general",
+        intent=result.get("intent") or "general",
         items=items,
         review=review_out,
         session_id=session_id,
