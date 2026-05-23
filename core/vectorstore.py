@@ -88,9 +88,9 @@ def retrieve_items(
     """
     store = get_vectorstore()
 
-    # Search widely (retrieve k * 3 candidates) to avoid missing relevant items due to strict filtering
     try:
-        results = store.similarity_search_with_score(query, k=k * 3)
+        # Fetch a larger candidate pool to avoid missing relevant items
+        results = store.similarity_search_with_score(query, k=max(k * 5, 20))
     except Exception as exc:
         logger.warning("Similarity search failed: %s", exc)
         return []
@@ -99,20 +99,19 @@ def retrieve_items(
     for doc, score in results:
         meta = doc.metadata or {}
 
-        # 1. Soft Filter: Domain
-        # If user explicitly asks for domains, we filter. If doc has 'unknown' domain, we treat it carefully.
-        item_domain = meta.get("domain", "unknown")
-        if domains and item_domain not in domains:
+        # Soft filter: domain
+        item_domain = (meta.get("domain") or "unknown").lower()
+        if domains and item_domain not in {d.lower() for d in domains}:
             continue
 
-        # 2. Filter: Budget
+        # Filter: budget
         item_price = meta.get("price_ngn")
-        if budget_ngn and item_price and item_price > budget_ngn * 1.3:
+        if budget_ngn is not None and item_price is not None and item_price > budget_ngn * 1.3:
             continue
 
-        # 3. Filter: Rating
+        # Filter: rating
         item_rating = meta.get("avg_rating")
-        if min_rating and item_rating and item_rating < min_rating:
+        if min_rating is not None and item_rating is not None and item_rating < min_rating:
             continue
 
         items.append({
@@ -122,13 +121,12 @@ def retrieve_items(
             "avg_rating": item_rating,
             "price_ngn": item_price,
             "page_content": doc.page_content,
-            "similarity_score": round(1 - score, 3),
+            "distance": float(score),  # lower is more similar
         })
 
-    # Deduplicate and sort by relevance
-    # We use a set of item_names to ensure unique recommendations
-    unique_items = {item['item_name']: item for item in items}.values()
-    sorted_items = sorted(unique_items, key=lambda x: x["similarity_score"], reverse=True)
+    # Deduplicate and sort by Chroma distance ascending (more relevant first)
+    unique_items = {item["item_name"]: item for item in items}.values()
+    sorted_items = sorted(unique_items, key=lambda x: x["distance"])
 
     logger.info("Retrieved %d items for query: %s", len(sorted_items), query[:60])
     return list(sorted_items)[:k]
