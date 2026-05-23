@@ -66,15 +66,24 @@ class RecommendRequest(BaseModel):
     need: str = Field(min_length=3, max_length=300)
     domains: Optional[List[ReviewDomain]] = None
 
+from pydantic import BaseModel, Field, field_validator # Make sure to import field_validator
+
 class RecommendedItem(BaseModel):
     rank: int
     item_name: str
-    # FIX: Default to a string so it won't crash if the source data or LLM passes null/None
-    domain: str = Field(default="unknown")
+    domain: str = "unknown"  # Acts as the fallback if the key is missing entirely
     category: Optional[str] = None
     avg_rating: Optional[float] = None
     reason: str
     survival_score: float
+
+    @field_validator("domain", mode="before")
+    @classmethod
+    def handle_null_domain(cls, v: Any) -> str:
+        """Forces explicit null/None values to a default string to prevent validation crashes."""
+        if v is None:
+            return "unknown"
+        return str(v)
 
 class RecommendResponse(BaseModel):
     recommendations: List[RecommendedItem]
