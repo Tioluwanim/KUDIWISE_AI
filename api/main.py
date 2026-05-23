@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import uuid
 from contextlib import asynccontextmanager
-
+from core.vectorstore import get_vectorstore, sync_chroma_db_from_gcs
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -41,14 +41,18 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("KudiWise AI starting up — env: %s", settings.app_env)
-    # Warm up vectorstore on startup so first request isn't slow
+    logger.info("KudiWise AI startup: Syncing and loading vectorstore...")
     try:
-        from core.vectorstore import get_vectorstore
+        # Strict Sync: If this fails, the API will not start
+        sync_chroma_db_from_gcs()
         vs = get_vectorstore()
-        logger.info("ChromaDB vectorstore ready")
+        count = vs._collection.count()
+        logger.info(f"ChromaDB ready. Index contains {count} items.")
+        if count == 0:
+            logger.warning("Vectorstore is empty! Recommendations will fail.")
     except Exception as exc:
-        logger.warning("ChromaDB not available yet: %s", exc)
+        logger.critical("Failed to initialize vectorstore: %s", exc)
+        raise exc # Kill startup if data is missing
     yield
     logger.info("KudiWise AI shutting down")
 
