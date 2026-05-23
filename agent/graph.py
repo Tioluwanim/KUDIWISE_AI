@@ -11,13 +11,12 @@ from typing import Any, Dict, List
 
 from langchain_google_vertexai import ChatVertexAI
 from langchain_core.messages import HumanMessage, AIMessage
-from langgraph.graph import StateGraph, CompiledStateGraph, END, START
+from langgraph.graph import StateGraph, END, START
 
 from core.config import get_settings
 from core.models import AgentState, ReviewResponse, RecommendResponse, RecommendedItem
 from core.prompts import task_a_prompt, task_b_prompt, intent_prompt, chat_prompt
 from core.vectorstore import retrieve_items as vector_retrieve
-
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
@@ -295,7 +294,7 @@ def route_after_intent(state: AgentState) -> str:
     }.get(intent, "general_chat")
 
 
-def build_graph() -> CompiledStateGraph:
+def build_graph() -> Any:
     builder = StateGraph(AgentState)
     builder.add_node("classify_intent", classify_intent)
     builder.add_node("fetch_few_shot", fetch_few_shot)
@@ -322,4 +321,4 @@ def build_graph() -> CompiledStateGraph:
     return builder.compile()
 
 
-kudiwise_graph: CompiledStateGraph = build_graph()
+kudiwise_graph: Any = build_graph()
