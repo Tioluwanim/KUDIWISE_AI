@@ -69,7 +69,8 @@ class RecommendRequest(BaseModel):
 class RecommendedItem(BaseModel):
     rank: int
     item_name: str
-    domain: str
+    # FIX: Default to a string so it won't crash if the source data or LLM passes null/None
+    domain: str = Field(default="unknown")
     category: Optional[str] = None
     avg_rating: Optional[float] = None
     reason: str
@@ -84,7 +85,7 @@ class RecommendResponse(BaseModel):
 # ─── Chat / multi-turn ───────────────────────────────────────────────────────
 
 class ChatMessage(BaseModel):
-    role: str # Keep simple or create an Enum for 'user'/'assistant'
+    role: str
     content: str
 
 class ChatRequest(BaseModel):
