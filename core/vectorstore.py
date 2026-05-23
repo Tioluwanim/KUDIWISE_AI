@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 EMBEDDING_MODEL = "gemini-embedding-001"
 LOCAL_DB_PATH = "/tmp/chroma_db"
 BUCKET_NAME = "zelta-ai-data-europe"
-GCS_PREFIX = "services/chroma_db/"
+GCS_PREFIX = "chroma_db/"
 
 def sync_chroma_db_from_gcs() -> str:
     """Downloads ChromaDB snapshot from GCS to local ephemeral storage."""
