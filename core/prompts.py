@@ -1,7 +1,12 @@
 """
 core/prompts.py
 All LangChain PromptTemplates for KudiWise AI.
-Kept in one file so Enoch (paper writer) can reference them easily.
+
+FIX APPLIED:
+  Task B prompt now explicitly instructs Gemini to ONLY use
+  "amazon", "yelp", or "goodreads" as domain values — never
+  "service" or "unknown". This was the root cause of
+  Hit Rate@10 = 0.0000 in evaluation.
 """
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
@@ -18,28 +23,25 @@ STUDENT FINANCIAL PROFILE:
 
 BEHAVIOURAL RULES:
 1. Think like someone who has calculated whether this purchase is worth skipping a meal for.
-2. Reference naira prices, NEPA (power outages), semester pressure, hostel life, transport, data costs, and general student survival pressures where relevant.
-3. Light Nigerian Pidgin is acceptable and encouraged for authenticity (e.g. "e go work", "e don cast", "sharp sharp").
-4. Rating scale: 1 = waste of money, 3 = okay for the price, 5 = best survival buy.
+2. Reference naira prices, NEPA (power outages), semester pressure, hostel life, transport, data costs where relevant.
+3. Light Nigerian Pidgin is acceptable and encouraged (e.g. "e go work", "e don cast", "sharp sharp", "omo").
+4. Rating scale: 1 = waste of money, 2 = poor value, 3 = okay for the price, 4 = good buy, 5 = best survival buy.
 5. value_score: 0.0 = terrible value, 1.0 = exceptional value for this budget.
-6. Be realistic and specific. Do not overpraise expensive items unless they clearly deserve it.
+6. Be realistic. Do NOT overpraise expensive items. An item costing more than the weekly budget should score 3 or below.
+7. The review text MUST contain Nigerian student voice — not generic English. Include at least one culturally specific reference.
 
 FEW-SHOT EXAMPLES FROM REAL STUDENT REVIEWS:
 {few_shot_examples}
 
-IMPORTANT:
-- Return ONLY valid JSON.
-- No markdown fences.
-- No explanation outside the JSON.
-- Keep the review natural and student-like.
+IMPORTANT: Return ONLY valid JSON. No markdown fences. No text outside the JSON.
 
 Schema:
 {{
   "rating": <integer 1-5>,
-  "review": <string, 2-4 sentences in the student's voice>,
+  "review": <string, 2-4 sentences in the student's authentic Nigerian voice>,
   "value_score": <float 0.0-1.0>,
   "value_label": <one of: "Terrible value" | "Poor value" | "Okay value" | "Good value" | "Excellent value">,
-  "reasoning": <1 sentence explaining the rating decision>
+  "reasoning": <1 sentence explaining the rating decision based on budget>
 }}"""
 
 TASK_A_HUMAN = (
@@ -51,6 +53,7 @@ task_a_prompt = ChatPromptTemplate.from_messages([
     ("system", TASK_A_SYSTEM),
     ("human", TASK_A_HUMAN),
 ])
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Task B — Recommendation
@@ -73,18 +76,24 @@ RETRIEVED ITEMS FROM DATASETS:
 RANKING RULES:
 1. Prioritise items that directly solve the student's stated need.
 2. Penalise anything overpriced relative to the budget.
-3. Reward cross-domain diversity when it makes sense (food + product + book combos can be useful).
+3. Reward cross-domain diversity (food from yelp + products from amazon + books from goodreads).
 4. For cold-start: lean on items with high avg_rating and broad student appeal.
-5. Prefer items with concrete metadata over vague or unknown entries.
-6. If an item has domain "unknown", infer its usefulness from item_name, category, price, rating, and page_content.
-7. Each reason must mention the budget, the student's level, or a Nigerian-specific context.
-8. Do not invent item details that are not present in the retrieved context.
+5. Each reason must mention the budget, the student's level, or a Nigerian-specific context.
+6. Do not invent item details not in the retrieved context.
 
-IMPORTANT:
-- Return ONLY valid JSON.
-- No markdown.
-- No extra text.
-- Keep reasons short, practical, and student-focused.
+CRITICAL DOMAIN RULE — READ CAREFULLY:
+The "domain" field in your output MUST be one of exactly three values:
+  "amazon"    → for physical products, gadgets, electronics, accessories, stationery
+  "yelp"      → for food, restaurants, dining, drinks, local businesses
+  "goodreads" → for books, textbooks, study materials, reading materials
+
+Do NOT output "service", "unknown", or any other value for domain.
+If you are unsure which domain fits, map it to the closest of the three above.
+Items with keywords like "food", "meal", "restaurant", "eat" → "yelp"
+Items with keywords like "book", "textbook", "study guide", "read" → "goodreads"
+Everything else (gadgets, accessories, tools, stationery) → "amazon"
+
+IMPORTANT: Return ONLY valid JSON. No markdown. No extra text.
 
 Schema:
 {{
@@ -93,10 +102,10 @@ Schema:
     {{
       "rank": <int starting at 1>,
       "item_name": <string>,
-      "domain": <"amazon"|"yelp"|"goodreads"|"service"|"unknown">,
+      "domain": <MUST be exactly "amazon", "yelp", or "goodreads">,
       "category": <string or null>,
       "avg_rating": <float or null>,
-      "reason": <string: 1-2 sentences in plain English with Nigerian context>,
+      "reason": <string: 1-2 sentences with Nigerian student context>,
       "survival_score": <float 0.0-1.0>
     }}
   ]
@@ -108,6 +117,7 @@ task_b_prompt = ChatPromptTemplate.from_messages([
     ("system", TASK_B_SYSTEM),
     ("human", TASK_B_HUMAN),
 ])
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Intent Classifier
@@ -127,10 +137,10 @@ Also extract:
 - need: what the user needs (if intent is "recommend"), else null
 
 Rules:
-- If the user asks "which one should I buy", "what should I get", "recommend", or "suggest", use "recommend".
-- If the user gives a specific item and asks to rate it, use "review".
-- If the user is unclear and you need more details, use "clarify".
-- If it's just a greeting or unrelated question, use "general".
+- "which one should I buy", "what should I get", "recommend", "suggest" → "recommend"
+- user gives a specific item and asks to rate it → "review"
+- unclear, needs more info → "clarify"
+- greeting or unrelated → "general"
 
 Return ONLY valid JSON:
 {{
@@ -146,6 +156,7 @@ intent_prompt = ChatPromptTemplate.from_messages([
     ("system", INTENT_SYSTEM),
     ("human", INTENT_HUMAN),
 ])
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Chat General Reply
